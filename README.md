@@ -63,6 +63,10 @@ The validator checks the normalized fields and whether subtotal + tax - discount
 
 The optional `/extract-invoice` endpoint sends extracted invoice text to Groq for structured fields and line items. It is disabled until `GROQ_API_KEY` is configured. This sends customer financial text to a third-party AI provider: disclose this clearly, obtain the appropriate customer consent, and review the provider's data-handling terms before enabling it. API keys stay server-side. The model is instructed not to guess and returns uncertain fields for human review. OCR remains local.
 
+## API authentication and CORS
+
+Set `API_KEY` on the backend to require `X-API-Key` or `Authorization: Bearer <key>` on API routes. `/health` remains public for connection checks. If `API_KEY` is empty, API routes are unauthenticated; do not expose that configuration publicly. Set `CORS_ALLOWED_ORIGINS` to your InvoiceFlow frontend origin(s), comma-separated. The API key entered in the browser connector is visible to that browser, so for a public multi-user SaaS, put the API behind a server-side proxy rather than sharing one secret in client code.
+
 ## Configuration
 
 | Variable | Default | Purpose |
