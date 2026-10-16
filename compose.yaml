@@ -1,0 +1,10 @@
+services:
+  open-invoice-engine:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      MAX_UPLOAD_MB: "15"
+      MAX_PDF_PAGES: "100"
+      VALIDATION_TOLERANCE: "0.02"
+    restart: unless-stopped
