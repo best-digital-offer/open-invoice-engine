@@ -9,6 +9,7 @@ A self-hostable PDF text extraction, optional OCR, and invoice-validation API. I
 - FastAPI endpoints: `/health`, `/extract`, and `/validate`
 - Embedded PDF text extraction using pdfplumber and pypdf
 - Optional OCR for pages without embedded text, using Tesseract + Poppler
+- Optional Groq-powered structured invoice-field and line-item extraction from extracted text
 - Per-page extraction method reporting and OCR-needed indicators
 - Pydantic invoice schema validation and deterministic total arithmetic checks
 - Upload-size and page-count safeguards
@@ -60,7 +61,7 @@ The validator checks the normalized fields and whether subtotal + tax - discount
 
 ## Groq integration
 
-This service does not call Groq or transmit customer files to a third party. A consuming app can send extracted text to Groq for structured field extraction when appropriate. If OCR output is empty or uncertain, keep the result flagged for review rather than inventing missing values. Keep AI keys server-side and review provider data-handling terms before sending financial documents.
+The optional `/extract-invoice` endpoint sends extracted invoice text to Groq for structured fields and line items. It is disabled until `GROQ_API_KEY` is configured. This sends customer financial text to a third-party AI provider: disclose this clearly, obtain the appropriate customer consent, and review the provider's data-handling terms before enabling it. API keys stay server-side. The model is instructed not to guess and returns uncertain fields for human review. OCR remains local.
 
 ## Configuration
 
@@ -71,6 +72,8 @@ This service does not call Groq or transmit customer files to a third party. A c
 | `VALIDATION_TOLERANCE` | 0.02 | Allowed absolute difference in invoice totals |
 | `OCR_ENABLED` | true | Enable local OCR on pages without embedded text |
 | `OCR_DPI` | 200 | Rendering resolution used for OCR |
+| `GROQ_API_KEY` | unset | Optional server-side key; enables `/extract-invoice` |
+| `GROQ_MODEL` | `llama-3.3-70b-versatile` | Groq model for structured extraction |
 
 Limits are safeguards, not a capacity guarantee. Before exposing this API publicly, add authentication, authorization, rate limiting, per-user quotas, structured monitoring, and a retention/deletion policy. Do not expose an unauthenticated instance to the public internet.
 
