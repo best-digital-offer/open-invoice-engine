@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import hmac
 import os
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import ValidationError
 
@@ -28,6 +30,19 @@ app.add_middleware(
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "X-API-Key"],
 )
+
+@app.middleware("http")
+async def optional_api_key_auth(request: Request, call_next):
+    """Protect API routes when API_KEY is configured; keep health checks public."""
+    expected_key = os.getenv("API_KEY", "").strip()
+    if expected_key and request.url.path not in {"/health", "/docs", "/openapi.json", "/redoc"} and request.method != "OPTIONS":
+        supplied_key = request.headers.get("X-API-Key", "")
+        authorization = request.headers.get("Authorization", "")
+        if not supplied_key and authorization.lower().startswith("bearer "):
+            supplied_key = authorization[7:].strip()
+        if not supplied_key or not hmac.compare_digest(supplied_key, expected_key):
+            return JSONResponse(status_code=401, content={"detail": "Missing or invalid API key"})
+    return await call_next(request)
 
 
 @app.get("/health")
