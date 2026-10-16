@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import os
+
 from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import ValidationError
 
 from . import __version__
@@ -13,6 +16,17 @@ app = FastAPI(
     title="Open Invoice Engine",
     description="Self-hosted PDF text extraction and deterministic invoice validation API.",
     version=__version__,
+)
+
+# Browser clients need CORS when the frontend and API are deployed on different origins.
+# Set CORS_ALLOWED_ORIGINS to a comma-separated list of production frontend origins.
+_cors_origins = [origin.strip() for origin in os.getenv("CORS_ALLOWED_ORIGINS", "*").split(",") if origin.strip()]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_origins,
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-API-Key"],
 )
 
 
