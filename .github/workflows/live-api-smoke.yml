@@ -1,0 +1,64 @@
+name: Live API Smoke Test
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  smoke-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install PDF test tools
+        run: python -m pip install --quiet reportlab requests
+      - name: Generate a synthetic invoice PDF and test the live API
+        env:
+          API_BASE_URL: https://open-invoice-engine.onrender.com
+        run: |
+          python - <<'PY'
+          import os
+          import requests
+          from reportlab.lib.pagesizes import letter
+          from reportlab.pdfgen import canvas
+
+          path = "/tmp/invoiceflow-smoke-invoice.pdf"
+          pdf = canvas.Canvas(path, pagesize=letter)
+          y = 740
+          for line in [
+              "INVOICE",
+              "Supplier: Smoke Test Supplies LLC",
+              "Invoice Number: SMOKE-INV-2026-001",
+              "Invoice Date: 2026-10-16",
+              "Currency: USD",
+              "Subtotal: 100.00",
+              "Tax: 8.00",
+              "Total Due: 108.00",
+          ]:
+              pdf.drawString(72, y, line)
+              y -= 24
+          pdf.save()
+
+          base = os.environ["API_BASE_URL"].rstrip("/")
+          health = requests.get(f"{base}/health", timeout=30)
+          health.raise_for_status()
+          assert health.json().get("status") == "ok", health.text
+
+          with open(path, "rb") as invoice:
+              response = requests.post(
+                  f"{base}/extract",
+                  files={"file": ("smoke-invoice.pdf", invoice, "application/pdf")},
+                  timeout=60,
+              )
+          response.raise_for_status()
+          payload = response.json()
+          extracted = payload.get("combined_text", "")
+          assert "SMOKE-INV-2026-001" in extracted, extracted
+          assert "Total Due: 108.00" in extracted, extracted
+          print("Live API smoke test passed.")
+          print(f"Pages: {payload.get('page_count')}; OCR used: {payload.get('ocr_used')}")
+          print("Synthetic invoice number and total were extracted from the uploaded PDF.")
+          PY
