@@ -1,20 +1,22 @@
 # Open Invoice Engine
 
-A self-hostable PDF text extraction and invoice-validation API. It is designed to avoid per-page PDF SaaS fees by using local open-source libraries.
+A self-hostable PDF text extraction, optional OCR, and invoice-validation API. It uses local open-source components and does not require a per-page PDF SaaS API.
 
-> **Important:** This is a starter implementation, not a production-certified invoice OCR system. It extracts embedded PDF text; scanned/image-only PDFs require an OCR engine, which is not enabled in this first version. No tool can provide unlimited compute for free: throughput depends on your own hosting resources.
+> **Capacity note:** open-source software removes per-page vendor charges, not compute limits. Throughput depends on your CPU/RAM, configured page/upload limits and concurrent jobs. This is an early implementation; validate accuracy on representative invoices before production use.
 
 ## Features
 
-- FastAPI HTTP service with `/health`, `/extract`, and `/validate` endpoints
-- PDF page and upload-size limits
-- Embedded text extraction using `pdfplumber`
-- Invoice-field schema validation using Pydantic
-- Arithmetic checks for subtotal, tax, discount, and total
-- No external AI API required for PDF text extraction or deterministic validation
-- Docker image and basic tests
+- FastAPI endpoints: `/health`, `/extract`, and `/validate`
+- Embedded PDF text extraction using pdfplumber and pypdf
+- Optional OCR for pages without embedded text, using Tesseract + Poppler
+- Per-page extraction method reporting and OCR-needed indicators
+- Pydantic invoice schema validation and deterministic total arithmetic checks
+- Upload-size and page-count safeguards
+- Docker image and automated tests
 
 ## Quick start (Python 3.11+)
+
+Install Python dependencies:
 
 ```bash
 python -m venv .venv
@@ -24,6 +26,8 @@ pip install -e '.[dev]'
 uvicorn open_invoice_engine.main:app --reload
 ```
 
+OCR requires the Tesseract binary and Poppler utilities to be installed on the host. If they are unavailable, the service still extracts embedded text and flags pages that need OCR. Docker installs these system packages for you.
+
 Open `http://127.0.0.1:8000/docs` for interactive API documentation.
 
 ## Run with Docker
@@ -32,37 +36,44 @@ Open `http://127.0.0.1:8000/docs` for interactive API documentation.
 docker compose up --build
 ```
 
-The API listens on port 8000.
+The API listens on port 8000. The image includes Tesseract and Poppler for local OCR.
 
 ## API examples
 
 ### Extract text from a PDF
 
 ```bash
-curl -X POST http://localhost:8000/extract \\
-  -F 'file=@invoice.pdf'
+curl -X POST http://localhost:8000/extract -F 'file=@invoice.pdf'
 ```
 
-Returns page count, per-page text, and combined text. This endpoint does not use Groq and does not perform OCR.
+The response includes page count, text per page, extraction method, combined text, and whether any page still requires OCR. OCR is attempted only on pages where embedded text extraction returns no text.
 
-### Validate extracted invoice fields
+### Validate invoice fields
 
 ```bash
-curl -X POST http://localhost:8000/validate \\
-  -H 'Content-Type: application/json' \\
+curl -X POST http://localhost:8000/validate \
+  -H 'Content-Type: application/json' \
   -d '{"invoice_number":"INV-100","invoice_date":"2026-10-16","currency":"USD","subtotal":100,"tax":8,"discount":0,"total":108}'
 ```
 
-Validation is deterministic. It checks required fields, numeric values, and whether `subtotal + tax - discount` agrees with `total` within a configurable tolerance. It cannot prove the source invoice itself is genuine or that OCR read every field correctly.
+The validator checks the normalized fields and whether subtotal + tax - discount matches total within the configured tolerance. It cannot prove an invoice is genuine or guarantee that OCR read every field correctly. Credit notes and other negative-value documents require business-specific rules.
 
 ## Groq integration
 
-This service deliberately does not call Groq. A consuming application can send extracted text to Groq when text extraction is sufficient. For image-only/scanned invoices, add a separate PDF-to-image + OCR/vision step and validate its output before saving it. Keep API keys server-side and never send customer documents without reviewing the AI provider's data-handling terms.
+This service does not call Groq or transmit customer files to a third party. A consuming app can send extracted text to Groq for structured field extraction when appropriate. If OCR output is empty or uncertain, keep the result flagged for review rather than inventing missing values. Keep AI keys server-side and review provider data-handling terms before sending financial documents.
 
-## Limits and production notes
+## Configuration
 
-Configure `MAX_UPLOAD_MB`, `MAX_PDF_PAGES`, and `VALIDATION_TOLERANCE` in the environment. Defaults are conservative safeguards, not guarantees of capacity. Before exposing this service publicly, add authentication, per-user quotas, request throttling, structured logs, malware scanning where appropriate, private storage/retention rules, and deployment-specific resource limits. Do not expose an unauthenticated instance to the public internet.
+| Variable | Default | Purpose |
+|---|---:|---|
+| `MAX_UPLOAD_MB` | 15 | Maximum uploaded PDF size |
+| `MAX_PDF_PAGES` | 100 | Maximum PDF page count |
+| `VALIDATION_TOLERANCE` | 0.02 | Allowed absolute difference in invoice totals |
+| `OCR_ENABLED` | true | Enable local OCR on pages without embedded text |
+| `OCR_DPI` | 200 | Rendering resolution used for OCR |
+
+Limits are safeguards, not a capacity guarantee. Before exposing this API publicly, add authentication, authorization, rate limiting, per-user quotas, structured monitoring, and a retention/deletion policy. Do not expose an unauthenticated instance to the public internet.
 
 ## License
 
-The code in this repository is licensed under MIT; see `LICENSE`. Dependencies retain their own licenses. Check dependency licenses and notices before distributing a combined product.
+The repository code is MIT-licensed; see `LICENSE`. Dependencies and external system packages have their own licenses. Review them before commercial distribution.
